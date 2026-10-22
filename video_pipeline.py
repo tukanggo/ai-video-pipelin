@@ -12,7 +12,7 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 def generate_video_content(topic):
     """Using Gemini to generate a video script"""
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3.8-flash")
     prompt = f"""
     You are a professional short-form video director. Create a 60-second video script about "{topic}".
     Strictly split it into 3 scenes and include:
