@@ -13,7 +13,7 @@ DATABASE_ID = "401e3e5446a9805ea91ddcbb6942de7a"
 # 初始化 Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 
-# 💡 室内设计主题库：每次运行会随机挑选一个不同的主题，让自动化内容丰富多彩！
+# 💡 你的专属室内设计与房屋改造主题库
 DESIGN_TOPICS = [
     {
         "title": "马来西亚老旧公寓厨房改造 (Modern Japandi Kitchen)",
@@ -43,38 +43,40 @@ DESIGN_TOPICS = [
 ]
 
 def generate_script():
-    # 随机选择一个设计主题
+    # 随机选择一个室内设计主题
     topic = random.choice(DESIGN_TOPICS)
-    print(f"Generating video script for topic: [{topic['titleysta'] if 'ysta' in topic else topic['title']}]...")
+    print(f"Generating modular design script for: [{topic['title']}]...")
     
     model = genai.GenerativeModel("gemini-3.8-flash")
     
-    # 动态模板化 Prompt
+    # 💡 完美融合了室内设计主题与“分步卡片式格式”的 Prompt 模板
     prompt = f"""
-    你是一位专业的室内设计短视频编导与内容创作者。请根据以下规则，为一期关于『{topic['title']}』的短视频创作一份精准的 60 秒分镜脚本。
+    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份分步执行的分镜脚本。
     
-    核心改造方向：{topic['focus']}
-    施工核心工艺：{topic['craft']}
+    【项目信息】
+    - 主题名称：{topic['title']}
+    - 核心痛点：{topic['focus']}
+    - 施工工艺：{topic['craft']}
     
-    严格遵循以下 3 个节奏阶段 (Pacing)：
-    1. 0-15s (老旧现状与痛点): 展现马来西亚或东南亚常见的拥挤、采光暗淡、空间局促的老旧实景。
-    2. 15-45s (匠心施工过程): 专业施工团队进驻，重点展示{topic['craft']}等幕后纪实。
-    3. 45-60s (惊艳焕新呈现): 现代禅意 (Modern Zen) 与高级感完美融合的明亮新空间揭幕。
+    【节奏与结构要求 (Pacing)】
+    严格按照 3 个阶段（0-15s 老旧痛点、15-45s 匠心施工、45-60s 焕新呈现）展开，共拆分为 6 到 7 个独立的幕（Scene）。
     
-    技术规格要求 (Video Prompts):
-    - 画面分辨率: HD 1280x720 (16:9 aspect ratio)
-    - 帧率: 60fps
-    - 风格: Photorealistic, cinematic, architectural documentary style, smooth transitions.
+    【核心格式要求】
+    为了方便创作者在 Canva 生成图片、在 Runway/剪映生成视频以及录制配音，每一幕必须严格包含以下 5 个模块：
+    - 📌 **幕号与主题** (例如: 第一幕：黄金3秒抓眼球)
+    - ⏱️ **时间轴** (例如: 00:00 - 00:04)
+    - 🎙️ **口播旁白 (Voiceover)**: (干货、有高级感或反差感的中文台词)
+    - 🎵 **音效 (SFX)**: (如：工具敲击声、清脆治愈的升华音效等)
+    - 🖼️ **第一步：生图提示词 (Image Prompt / Canva & Midjourney)**: (详细的英文画面描述，带 cinematic, photorealistic, 8k --ar 16:9 等参数)
+    - 🎥 **第二步：生视频提示词 (Video Prompt / Runway & Kling)**: (动态镜头运动英文提示词，如 camera zooms in, 60fps)
     
-    输出格式要求：
-    必须包含三大板块（Visuals 画面描述、Video Prompt 英文AI提示词、Audio & Voiceover 中文配音与音效）。内容要生动、极具高级感，适合发布在抖音、TikTok 或小红书上。
+    请确保内容生动、极具高级感和纪录片质感，适合直接复制粘贴去生产。
     """
     
     max_retries = 3
     for attempt in range(max_retries):
         try:
             response = model.generate_content(prompt)
-            # 同时返回生成的文本和当前主题标题，方便写入 Notion
             return topic['title'], response.text
         except ResourceExhausted as e:
             if attempt < max_retries - 1:
@@ -85,13 +87,13 @@ def generate_script():
                 raise e
 
 def split_text_into_chunks(text, max_length=2000):
+    """将长文本切分为不超过 2000 字符的列表，适配 Notion 的 rich_text 限制"""
     return [text[i:i + max_length] for i in range(0, len(text), max_length)]
 
 def save_to_notion(topic_title, script_content):
     print("Writing to Notion database...")
     
     url = "https://api.notion.com/v1/pages"
-    
     headers = {
         "Authorization": f"Bearer {NOTION_API_KEY}",
         "Content-Type": "application/json",
@@ -116,7 +118,7 @@ def save_to_notion(topic_title, script_content):
                 "title": [
                     {
                         "text": {
-                            "content": topic_title  # 动态将当前随机抽到的主题作为 Notion 的名称
+                            "content": topic_title
                         }
                     }
                 ]
@@ -130,7 +132,7 @@ def save_to_notion(topic_title, script_content):
     response = requests.post(url, json=payload, headers=headers)
     
     if response.status_code == 200:
-        print(f"Success: '{topic_title}' script successfully saved to Notion!")
+        print(f"Success: Modular design script '{topic_title}' successfully saved to Notion!")
     else:
         print(f"Error: Failed to write -> {response.text}")
 
