@@ -5,7 +5,7 @@ import google.generativeai as genai
 # 从环境变量中读取密钥和配置
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
-DATABASE_ID = "401e3e5446a980cbb994000c524fe038"
+DATABASE_ID = "401e3e5446a9805ea91ddcbb6942de7a"
 
 # 初始化 Gemini
 genai.configure(api_key=GEMINI_API_KEY)
