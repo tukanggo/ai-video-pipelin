@@ -6,7 +6,7 @@ on:
 
   # 2. 定时自动运行配置（Schedule）- 每天早上 8:00 自动运行 (UTC时间)
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 21 * * *'
 
 jobs:
   run-script:
