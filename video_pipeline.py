@@ -5,7 +5,7 @@ import google.generativeai as genai
 # 1. Load keys securely from environment variables
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
-DATABASE_ID = "400e3e5446a980a5981fd5ca4e370977"
+DATABASE_ID = "401e3e5446a980cbb994000c524fe038"
 
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
