@@ -48,7 +48,7 @@ def generate_script():
     print(f"Generating modular design script for: [{topic['title']}]...")
     
     # 💡 修正：使用正确的 gemini-2.5-flash 模型
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3.8-flash")
     
     # 💡 完美融合了室内设计主题与“分步卡片式格式”的 Prompt 模板
     prompt = f"""
