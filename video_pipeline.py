@@ -47,7 +47,8 @@ def generate_script():
     topic = random.choice(DESIGN_TOPICS)
     print(f"Generating modular design script for: [{topic['title']}]...")
     
-    model = genai.GenerativeModel("gemini-3.8-flash")
+    # 💡 修正：使用正确的 gemini-2.5-flash 模型
+    model = genai.GenerativeModel("gemini-2.5-flash")
     
     # 💡 完美融合了室内设计主题与“分步卡片式格式”的 Prompt 模板
     prompt = f"""
@@ -86,8 +87,8 @@ def generate_script():
                 print("已达到最大重试次数，API 额度耗尽。")
                 raise e
 
-def split_text_into_chunks(text, max_length=2000):
-    """将长文本切分为不超过 2000 字符的列表，适配 Notion 的 rich_text 限制"""
+def split_text_into_chunks(text, max_length=1900):
+    """将长文本严格切分为安全长度（设为1900以防中文多字节边界溢出）的列表，适配 Notion 的 rich_text 限制"""
     return [text[i:i + max_length] for i in range(0, len(text), max_length)]
 
 def save_to_notion(topic_title, script_content):
@@ -100,7 +101,8 @@ def save_to_notion(topic_title, script_content):
         "Notion-Version": "2022-06-28"
     }
     
-    script_chunks = split_text_into_chunks(script_content, max_length=2000)
+    # 💡 将长脚本切分为多个 <2000 字符的片段
+    script_chunks = split_text_into_chunks(script_content, max_length=1900)
     
     rich_text_array = []
     for chunk in script_chunks:
