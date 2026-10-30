@@ -23,16 +23,33 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 第三步：安装依赖库（requests 和 google-generativeai）
+      # 第三步：安装依赖库
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests google-generativeai edge-tts
 
-      # 第四步：运行 Python 脚本，并注入我们在 Secrets 里藏好的密钥
+      # 第四步：运行 Python 脚本，并注入密钥和仓库名
       - name: Run video pipeline script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python video_pipeline.py
+
+      # 第五步：自动将生成的 voiceover.mp3 提交并推送到 GitHub 仓库根目录
+      - name: Commit and push generated audio
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          
+          # 确保拉取最新状态，防止冲突
+          git pull origin main || true
+          
+          # 强制将生成的 mp3 添加并提交
+          git add voiceover.mp3
+          git commit -m "Auto-update latest voiceover mp3 [skip ci]" || echo "No changes to commit"
+          
+          # 推送到 GitHub 主分支
+          git push origin main
