@@ -11,7 +11,7 @@ from google.api_core.exceptions import ResourceExhausted
 # 从环境变量中读取密钥和配置
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
-GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "your-username/your-repo") # 自动获取 GitHub 仓库名
+GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "tukanggo/ai-video-pipelin") # 根据你的仓库名调整
 DATABASE_ID = "401e3e5446a9805ea91ddcbb6942de7a"
 
 # 初始化 Gemini
@@ -44,13 +44,13 @@ def generate_script():
     - 施工工艺：{topic['craft']}
     
     【核心格式要求】
-    每一幕必须严格包含：
+    每一幕必须严格包含以下 5 个模块：
     - 📌 **幕号与主题** 
     - ⏱️ **时间轴** 
-    - 🎙️ **口播旁白 (Voiceover)**: (纯中文口播台词)
+    - 🎙️ **口播旁白 (Voiceover)**: (纯中文口播台词，不要包含英文提示词或代码符号)
     - 🎵 **音效 (SFX)**: 
-    - 🖼️ **生图提示词**: 
-    - 🎥 **生视频提示词**: 
+    - 🖼️ **第一步：生图提示词**: 
+    - 🎥 **第二步：生视频提示词**: 
     """
     
     max_retries = 3
@@ -65,18 +65,31 @@ def generate_script():
                 raise e
 
 async def text_to_speech(text, output_filename="voiceover.mp3"):
-    print(f"正在合成语音旁白 (输出文件: {output_filename})...")
+    print(f"正在合成纯旁白语音 (字数: {len(text)})...")
     voice = "zh-CN-XiaoxiaoNeural"
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_filename)
     print(f"✅ 语音合成成功: {output_filename}")
 
 def extract_voiceovers(script_text):
-    pattern = r"🎙️\s*\*?口播旁白[^:\n]*[:：]\s*\*?([^\n*]+)"
+    """
+    🎯 核心升级：精确提取所有 '🎙️ 口播旁白' 后面的台词内容，
+    过滤掉所有时间轴、音效和生图生视频提示词。
+    """
+    # 匹配以 🎙️ 或 “口播旁白” 开头，直到行尾或下一个模块的所有中文/英文台词
+    pattern = r"(?:🎙️|\*\*?口播旁白[^:\n]*[:：]\*\*?)\s*([^\n#*]+)"
     matches = re.findall(pattern, script_text)
+    
     if matches:
-        return " ".join(matches)
-    return re.sub(r'[#*`_]', '', script_text)[:1000]
+        # 清洗并合并所有旁白片段
+        clean_lines = [m.strip(" *`-_") for m in matches if len(m.strip()) > 2]
+        full_voiceover = " ".join(clean_lines)
+        print(f"📌 成功提取的纯旁白内容: {full_voiceover[:150]}...")
+        return full_voiceover
+    
+    # 兜底方案：如果正则没对齐，返回前 800 字纯文本
+    print("⚠️ 未能通过正则精准匹配旁白，启动兜底清洗...")
+    return re.sub(r'[#*`_]', '', script_text)[:800]
 
 def split_text_into_chunks(text, max_length=1900):
     return [text[i:i + max_length] for i in range(0, len(text), max_length)]
@@ -91,8 +104,7 @@ def save_to_notion_with_audio(topic_title, script_content):
         "Notion-Version": "2022-06-28"
     }
     
-    # 构造 GitHub 仓库中该音频文件的公开直链 (Raw URL)
-    # 这样当 GitHub actions 把它 push 到仓库后，Notion 可以直接加载并播放它
+    # 构造公开直链
     audio_public_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/voiceover.mp3"
     
     script_chunks = split_text_into_chunks(script_content, max_length=1900)
@@ -108,7 +120,6 @@ def save_to_notion_with_audio(topic_title, script_content):
                 "rich_text": rich_text_array
             }
         },
-        # 💡 核心亮点：在 Notion 页面正文中直接挂载一个原生的音频播放器块！
         "children": [
             {
                 "object": "block",
@@ -131,6 +142,12 @@ def save_to_notion_with_audio(topic_title, script_content):
 
 if __name__ == "__main__":
     title, script = generate_script()
+    
+    # 1. 精准提取纯旁白
     voiceover_text = extract_voiceovers(script)
+    
+    # 2. 合成语音
     asyncio.run(text_to_speech(voiceover_text, "voiceover.mp3"))
+    
+    # 3. 写入 Notion
     save_to_notion_with_audio(title, script)
