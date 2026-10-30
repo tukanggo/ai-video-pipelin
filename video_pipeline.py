@@ -8,15 +8,20 @@ import edge_tts
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
 
-# 从环境变量中读取密钥和配置
+# ==================== 1. 配置与环境变量 ====================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
-GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "tukanggo/ai-video-pipelin") # 根据你的仓库名调整
+# 自动获取 GitHub 仓库名（如 tukanggo/ai-video-pipeline），如果为空则使用你的默认仓库
+GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "tukanggo/ai-video-pipeline") 
 DATABASE_ID = "401e3e5446a9805ea91ddcbb6942de7a"
 
 # 初始化 Gemini
+if not GEMINI_API_KEY:
+    raise ValueError("❌ 错误：未检测到 GEMINI_API_KEY 环境变量，请在 Secrets 中配置。")
+
 genai.configure(api_key=GEMINI_API_KEY)
 
+# ==================== 2. 设计主题素材库 ====================
 DESIGN_TOPICS = [
     {
         "title": "马来西亚老旧公寓厨房改造 (Modern Japandi Kitchen)",
@@ -30,9 +35,10 @@ DESIGN_TOPICS = [
     }
 ]
 
+# ==================== 3. 生成 Gemini 分镜脚本 ====================
 def generate_script():
     topic = random.choice(DESIGN_TOPICS)
-    print(f"Generating modular design script for: [{topic['title']}]...")
+    print(f"📌 正在调用 Gemini 生成设计短视频脚本: [{topic['title']}]...")
     
     model = genai.GenerativeModel("gemini-3.8-flash")
     prompt = f"""
@@ -44,10 +50,10 @@ def generate_script():
     - 施工工艺：{topic['craft']}
     
     【核心格式要求】
-    每一幕必须严格包含以下 5 个模块：
+    每一幕必须严格包含以下结构：
     - 📌 **幕号与主题** 
     - ⏱️ **时间轴** 
-    - 🎙️ **口播旁白 (Voiceover)**: (纯中文口播台词，不要包含英文提示词或代码符号)
+    - 🎙️ **口播旁白 (Voiceover)**: (纯中文口播台词，语气自然流畅，适合短视频口播，绝对不要包含任何英文提示词或代码符号)
     - 🎵 **音效 (SFX)**: 
     - 🖼️ **第一步：生图提示词**: 
     - 🎥 **第二步：生视频提示词**: 
@@ -60,42 +66,74 @@ def generate_script():
             return topic['title'], response.text
         except ResourceExhausted as e:
             if attempt < max_retries - 1:
+                print(f"⚠️ Gemini 额度超限，正在进行第 {attempt + 1} 次重试（等待 60 秒）...")
                 time.sleep(60)
             else:
                 raise e
 
-async def text_to_speech(text, output_filename="voiceover.mp3"):
-    print(f"正在合成纯旁白语音 (字数: {len(text)})...")
-    voice = "zh-CN-XiaoxiaoNeural"
-    communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(output_filename)
-    print(f"✅ 语音合成成功: {output_filename}")
-
+# ==================== 4. 智能提取纯旁白 ====================
 def extract_voiceovers(script_text):
     """
-    🎯 核心升级：精确提取所有 '🎙️ 口播旁白' 后面的台词内容，
-    过滤掉所有时间轴、音效和生图生视频提示词。
+    精确提取所有 '🎙️ 口播旁白' 后面的中文台词，过滤掉所有时间轴、音效和生图提示词。
     """
-    # 匹配以 🎙️ 或 “口播旁白” 开头，直到行尾或下一个模块的所有中文/英文台词
+    # 正则匹配旁白
     pattern = r"(?:🎙️|\*\*?口播旁白[^:\n]*[:：]\*\*?)\s*([^\n#*]+)"
     matches = re.findall(pattern, script_text)
     
     if matches:
-        # 清洗并合并所有旁白片段
         clean_lines = [m.strip(" *`-_") for m in matches if len(m.strip()) > 2]
         full_voiceover = " ".join(clean_lines)
-        print(f"📌 成功提取的纯旁白内容: {full_voiceover[:150]}...")
-        return full_voiceover
-    
-    # 兜底方案：如果正则没对齐，返回前 800 字纯文本
-    print("⚠️ 未能通过正则精准匹配旁白，启动兜底清洗...")
-    return re.sub(r'[#*`_]', '', script_text)[:800]
+        if len(full_voiceover) > 10:
+            print(f"🎙️ 成功提取纯旁白文本 ({len(full_voiceover)}字): {full_voiceover[:120]}...")
+            return full_voiceover
 
+    # 兜底：如果正则未匹配到，提取全文中的中文字符
+    print("⚠️ 警告：正则未严格匹配旁白标签，启动中文通用兜底提取...")
+    chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、]', script_text))
+    if len(chinese_chars) > 20:
+        return chinese_chars[:800]
+        
+    return script_text[:500]
+
+# ==================== 5. Edge-TTS 语音合成（带防 0KB 校验） ====================
+async def text_to_speech(text, output_filename="voiceover.mp3"):
+    """安全稳健的 Edge-TTS 合成函数，带防 0KB 损坏校验与自动重试"""
+    if not text or len(text.strip()) < 5:
+        print("⚠️ 警告：检测到提取的旁白文本为空，已自动启用保底文案。")
+        text = "欢迎来到本期马来西亚室内设计改造分享，让我们一起打造兼具美学与实用性的高级感生活空间。"
+
+    print(f"🔊 正在使用 Edge-TTS 合成微软晓晓语音 (有效字数: {len(text)})...")
+    voice = "zh-CN-XiaoxiaoNeural"
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # 过滤换行符等潜在干扰字符
+            safe_text = re.sub(r'[\r\n\t]', ' ', text)
+            
+            communicate = edge_tts.Communicate(safe_text, voice)
+            await communicate.save(output_filename)
+            
+            # 核心校验：文件必须存在且大小超过 1KB（彻底杜绝 0 KB 损坏）
+            if os.path.exists(output_filename) and os.path.getsize(output_filename) > 1024:
+                file_size = os.path.getsize(output_filename)
+                print(f"✅ 语音合成成功: {output_filename} (文件大小: {file_size} 字节)")
+                return
+            else:
+                print(f"⚠️ 第 {attempt + 1} 次生成的文件异常（大小 <= 1KB 或 0 KB），正在重试...")
+        except Exception as e:
+            print(f"⚠️ TTS 合成异常: {e}，正在进行第 {attempt + 1} 次重试...")
+            
+        await asyncio.sleep(5)
+        
+    raise Exception("❌ 致命错误：多次尝试后 Edge-TTS 依然无法生成有效的 MP3 文件。")
+
+# ==================== 6. 切片与写入 Notion 数据库 ====================
 def split_text_into_chunks(text, max_length=1900):
     return [text[i:i + max_length] for i in range(0, len(text), max_length)]
 
 def save_to_notion_with_audio(topic_title, script_content):
-    print("Writing to Notion database with native audio block...")
+    print("📤 正在将脚本与原生音频播放器写入 Notion 数据库...")
     
     url = "https://api.notion.com/v1/pages"
     headers = {
@@ -104,7 +142,7 @@ def save_to_notion_with_audio(topic_title, script_content):
         "Notion-Version": "2022-06-28"
     }
     
-    # 构造公开直链
+    # 构造公开的 GitHub Raw 音频直链
     audio_public_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/voiceover.mp3"
     
     script_chunks = split_text_into_chunks(script_content, max_length=1900)
@@ -120,6 +158,7 @@ def save_to_notion_with_audio(topic_title, script_content):
                 "rich_text": rich_text_array
             }
         },
+        # 在 Notion 页面正文中直接挂载原生音频播放器块
         "children": [
             {
                 "object": "block",
@@ -136,18 +175,20 @@ def save_to_notion_with_audio(topic_title, script_content):
     
     response = requests.post(url, json=payload, headers=headers)
     if response.status_code == 200:
-        print(f"Success: '{topic_title}' and audio block successfully saved to Notion!")
+        print(f"🎉 Success: '{topic_title}' 及其配套音频已成功写入 Notion！")
     else:
-        print(f"Error: Failed to write -> {response.text}")
+        print(f"❌ Error: 写入 Notion 失败 -> {response.text}")
 
+# ==================== 主程序入口 ====================
 if __name__ == "__main__":
+    # 1. 生成大纲分镜脚本
     title, script = generate_script()
     
-    # 1. 精准提取纯旁白
+    # 2. 精准提取纯旁白台词
     voiceover_text = extract_voiceovers(script)
     
-    # 2. 合成语音
+    # 3. 异步合成语音并保存为 voiceover.mp3
     asyncio.run(text_to_speech(voiceover_text, "voiceover.mp3"))
     
-    # 3. 写入 Notion
+    # 4. 写入 Notion 数据库（并嵌入音频外链）
     save_to_notion_with_audio(title, script)
