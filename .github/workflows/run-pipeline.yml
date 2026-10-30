@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests google-generativeai
+          pip install requests google-generativeai edge-tts
 
       # 第四步：运行 Python 脚本，并注入我们在 Secrets 里藏好的密钥
       - name: Run video pipeline script
