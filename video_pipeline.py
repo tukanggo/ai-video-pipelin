@@ -11,7 +11,7 @@ from google.api_core.exceptions import ResourceExhausted
 # ==================== 1. 配置与环境变量 ====================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
-# 自动获取 GitHub 仓库名（如 tukanggo/ai-video-pipeline），如果为空则使用你的默认仓库
+# 自动获取 GitHub 仓库名，格式如 tukanggo/ai-video-pipeline
 GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "tukanggo/ai-video-pipeline") 
 DATABASE_ID = "401e3e5446a9805ea91ddcbb6942de7a"
 
@@ -50,7 +50,7 @@ def generate_script():
     - 施工工艺：{topic['craft']}
     
     【核心格式要求】
-    每一幕必须严格包含以下结构：
+    每一幕必须严格包含以下结构，切勿漏掉 Emoji 标签：
     - 📌 **幕号与主题** 
     - ⏱️ **时间轴** 
     - 🎙️ **口播旁白 (Voiceover)**: (纯中文口播台词，语气自然流畅，适合短视频口播，绝对不要包含任何英文提示词或代码符号)
@@ -71,26 +71,58 @@ def generate_script():
             else:
                 raise e
 
-# ==================== 4. 智能提取纯旁白 ====================
+# ==================== 4. 完美精准过滤纯旁白（核心升级） ====================
 def extract_voiceovers(script_text):
     """
-    精确提取所有 '🎙️ 口播旁白' 后面的中文台词，过滤掉所有时间轴、音效和生图提示词。
+    🎯 完美过滤函数：精准抓取所有 '口播旁白 (Voiceover)' 后面的纯台词，
+    自动过滤掉 Markdown 符号、时间轴、音效及生图生视频提示词。
     """
-    # 正则匹配旁白
-    pattern = r"(?:🎙️|\*\*?口播旁白[^:\n]*[:：]\*\*?)\s*([^\n#*]+)"
-    matches = re.findall(pattern, script_text)
+    print("🔍 正在从脚本中精准过滤并提取纯口播旁白...")
     
-    if matches:
-        clean_lines = [m.strip(" *`-_") for m in matches if len(m.strip()) > 2]
-        full_voiceover = " ".join(clean_lines)
-        if len(full_voiceover) > 10:
-            print(f"🎙️ 成功提取纯旁白文本 ({len(full_voiceover)}字): {full_voiceover[:120]}...")
+    voiceover_lines = []
+    lines = script_text.split('\n')
+    capture = False
+    
+    for line in lines:
+        # 当检测到包含“口播旁白”或“Voiceover”的行时开始捕获
+        if "口播旁白" in line or "Voiceover" in line:
+            parts = re.split(r'[:：]', line, 1)
+            if len(parts) > 1:
+                content = parts[1].strip(" *`-_'")
+                if content and not content.startswith("Voiceover") and not content.startswith("口播旁白"):
+                    voiceover_lines.append(content)
+            capture = True
+            continue
+        
+        # 如果在捕获状态下遇到其他模块的 Emoji 标签或分隔符，立即停止捕获当前旁白
+        if capture and any(tag in line for tag in ["⏱️", "🎵", "🖼️", "🎥", "###", "---"]):
+            capture = False
+        elif capture:
+            content = line.strip(" *`-_'")
+            # 排除残留的提示词或标签行
+            if content and not any(tag in content for tag in ["时间轴", "音效", "提示词", "生图", "生视频"]):
+                voiceover_lines.append(content)
+    
+    if voiceover_lines:
+        full_voiceover = " ".join(voiceover_lines)
+        if len(full_voiceover) > 5:
+            print(f"🎙️ 成功精准提取纯旁白 ({len(full_voiceover)} 字): {full_voiceover[:120]}...")
             return full_voiceover
 
-    # 兜底：如果正则未匹配到，提取全文中的中文字符
-    print("⚠️ 警告：正则未严格匹配旁白标签，启动中文通用兜底提取...")
-    chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、]', script_text))
-    if len(chinese_chars) > 20:
+    # 备用正则兜底
+    pattern = r"(?:🎙️|口播旁白|Voiceover).*?[:：]\s*\*?\*?([^\n#*]+)"
+    matches = re.findall(pattern, script_text)
+    if matches:
+        clean_parts = [m.strip(" *`-_'") for m in matches if len(m.strip()) > 2]
+        full_voiceover = " ".join(clean_parts)
+        if len(full_voiceover) > 5:
+            print(f"🎙️ 备用正则命中旁白 ({len(full_voiceover)} 字): {full_voiceover[:120]}...")
+            return full_voiceover
+
+    # 终极安全兜底
+    print("⚠️ 警告：未能精准匹配旁白，启动中文字符全局兜底...")
+    chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、：；“”‘’]', script_text))
+    if len(chinese_chars) > 10:
         return chinese_chars[:800]
         
     return script_text[:500]
@@ -108,7 +140,7 @@ async def text_to_speech(text, output_filename="voiceover.mp3"):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            # 过滤换行符等潜在干扰字符
+            # 清理潜在干扰字符
             safe_text = re.sub(r'[\r\n\t]', ' ', text)
             
             communicate = edge_tts.Communicate(safe_text, voice)
@@ -133,7 +165,7 @@ def split_text_into_chunks(text, max_length=1900):
     return [text[i:i + max_length] for i in range(0, len(text), max_length)]
 
 def save_to_notion_with_audio(topic_title, script_content):
-    print("📤 正在将脚本与原生音频播放器写入 Notion 数据库...")
+    print("📤 正在将完整分镜脚本与原生音频播放器写入 Notion 数据库...")
     
     url = "https://api.notion.com/v1/pages"
     headers = {
@@ -184,7 +216,7 @@ if __name__ == "__main__":
     # 1. 生成大纲分镜脚本
     title, script = generate_script()
     
-    # 2. 精准提取纯旁白台词
+    # 2. 精准过滤并提取纯旁白台词
     voiceover_text = extract_voiceovers(script)
     
     # 3. 异步合成语音并保存为 voiceover.mp3
