@@ -41,7 +41,9 @@ def generate_script():
     topic = random.choice(DESIGN_TOPICS)
     print(f"📌 正在调用 Gemini 生成设计短视频脚本: [{topic['title']}]...")
     
-    model = genai.GenerativeModel("gemini-3.8-flash")
+    # 💡 核心修复：将旧的错误的 gemini-3.8-flash 替换为官方稳定的 gemini-2.5-flash
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    
     prompt = f"""
     你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份分步执行的分镜脚本。
     
@@ -69,6 +71,12 @@ def generate_script():
             if attempt < max_retries - 1:
                 print(f"⚠️ Gemini 额度超限，正在进行第 {attempt + 1} 次重试（等待 60 秒）...")
                 time.sleep(60)
+            else:
+                raise e
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"⚠️ 生成脚本出错 ({e})，正在进行第 {attempt + 1} 次重试（等待 10 秒）...")
+                time.sleep(10)
             else:
                 raise e
 
@@ -118,7 +126,7 @@ def extract_voiceovers(script_text):
         
     return script_text[:500]
 
-# ==================== 5. 自动根据脚本生成 AI 效果图（新增） ====================
+# ==================== 5. 自动根据脚本生成 AI 效果图 ====================
 def generate_image_from_script(script_text, output_filename="scene_image.jpg"):
     print("🎨 正在从脚本中解析生图提示词 (Image Prompt)...")
     
@@ -201,7 +209,7 @@ async def text_to_speech(text, output_filename="voiceover.mp3"):
         except Exception as e:
             print(f"⚠️ TTS 合成异常: {e}，正在重试...")
             
-        await asyncio.sleep(5)
+        time.sleep(5)
         
     raise Exception("❌ 致命错误：多次尝试后 Edge-TTS 无法生成有效的 MP3 文件。")
 
