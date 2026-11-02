@@ -12,16 +12,17 @@ jobs:
   run-script:
     runs-on: ubuntu-latest
     
-    # 💡 核心权限：显式申请仓库写入权限，彻底解决 Git 403 报错
+    # 核心权限：显式申请仓库写入权限，彻底解决 Git 403 报错
     permissions:
       contents: write
 
     steps:
-      # 第一步：拉取仓库代码
+      # 第一步：拉取仓库代码（设置 fetch-depth: 0 完整克隆，避免多图提交冲突）
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       # 第二步：配置 Python 环境
       - name: Set up Python
@@ -50,11 +51,13 @@ jobs:
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           
-          # 拉取最新变动，防止冲突
-          git pull origin main || true
+          # 拉取并合并远程最新变动
+          git pull origin main --rebase || true
           
-          # 💡 核心修改：使用通配符匹配所有 scene_image_*.jpg 和 voiceover.mp3
+          # 使用通配符将所有动态生成的图片与音频加入暂存区
           git add voiceover.mp3 scene_image_*.jpg
+          
+          # 提交更改（如果无变化则跳过）
           git commit -m "Auto-update multi-scene HD images and voiceover [skip ci]" || echo "No changes to commit"
           
           # 推送到远程主分支
