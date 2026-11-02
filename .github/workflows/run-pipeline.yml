@@ -44,7 +44,7 @@ jobs:
         run: |
           python video_pipeline.py
 
-      # 第五步：自动将生成的 voiceover.mp3 和 scene_image.jpg 提交并推送到 GitHub 根目录
+      # 第五步：自动将生成的语音和所有 1080P 分镜高清图提交并推送到 GitHub 根目录
       - name: Commit and push generated assets
         run: |
           git config --global user.name "GitHub Actions Bot"
@@ -53,9 +53,9 @@ jobs:
           # 拉取最新变动，防止冲突
           git pull origin main || true
           
-          # 添加生成的音频和图片文件
-          git add voiceover.mp3 scene_image.jpg
-          git commit -m "Auto-update latest voiceover and scene image [skip ci]" || echo "No changes to commit"
+          # 💡 核心修改：使用通配符匹配所有 scene_image_*.jpg 和 voiceover.mp3
+          git add voiceover.mp3 scene_image_*.jpg
+          git commit -m "Auto-update multi-scene HD images and voiceover [skip ci]" || echo "No changes to commit"
           
           # 推送到远程主分支
           git push origin main
