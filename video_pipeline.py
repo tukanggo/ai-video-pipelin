@@ -39,7 +39,7 @@ def generate_script():
     topic = random.choice(DESIGN_TOPICS)
     print(f"📌 正在调用 Gemini 生成设计短视频脚本: [{topic['title']}]...")
     
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3.6-flash")
     
     prompt = f"""
     你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份分步执行的分镜脚本（建议分为 3-4 个幕）。
