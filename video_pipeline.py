@@ -131,9 +131,9 @@ def extract_voiceovers(script_text):
     chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、：；“”‘’]', script_text))
     return chinese_chars[:800] if len(chinese_chars) > 10 else script_text[:500]
 
-# ==================== 5. 并行渲染 4 张专属 1080P 高清图 ====================
+# ==================== 5. 稳健版：带防流控冷却与重试的 4 图并行渲染 ====================
 def generate_images_from_prompts(prompts):
-    print(f"✨ 成功获取到 {len(prompts)} 个独立分镜 Prompt，开始依次渲染全部 4 张高清图...")
+    print(f"✨ 成功获取到 {len(prompts)} 个独立分镜 Prompt，开始依次渲染全部 4 张高清图（已启用防流控保护）...")
     
     generated_files = []
     for idx, prompt_text in enumerate(prompts, start=1):
@@ -144,12 +144,15 @@ def generate_images_from_prompts(prompts):
         print(f"🖼️ 正在渲染第 {idx} 幕高清图 ({filename})...")
         
         encoded_prompt = urllib.parse.quote(hd_prompt)
-        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1080&height=1920&nologo=true&enhance=true"
+        # 针对稳定性，适当优化渲染参数
+        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1080&height=1920&nologo=true"
         
         success = False
-        for attempt in range(3):
+        # 增加到最多重试 5 次，应对免费 API 的偶尔拥堵
+        for attempt in range(1, 6):
             try:
-                res = requests.get(image_url, timeout=50)
+                # 延长超时时间至 60 秒
+                res = requests.get(image_url, timeout=60)
                 if res.status_code == 200 and len(res.content) > 15000:
                     with open(filename, "wb") as f:
                         f.write(res.content)
@@ -157,12 +160,26 @@ def generate_images_from_prompts(prompts):
                     generated_files.append(filename)
                     success = True
                     break
+                else:
+                    print(f"   ⚠️ 第 {idx} 幕尝试 {attempt} 失败 (状态码: {res.status_code})，重试中...")
             except Exception as e:
-                print(f"   ⚠️ {filename} 下载异常 ({e})，重试中...")
-            time.sleep(3)
+                print(f"   ⚠️ 第 {idx} 幕尝试 {attempt} 异常 ({e})，重试中...")
+            
+            # 每次失败后阶梯等待递增时间
+            time.sleep(5 * attempt)
             
         if not success:
-            print(f"   ❌ {filename} 生成失败。")
+            print(f"   ❌ {filename} 连续重试后依然生成失败，使用保底兜底机制...")
+            # 极致兜底：如果某一张图实在下载失败，复制第一张图作为备用，确保永远有 4 张图提交
+            if os.path.exists("scene_image_1.jpg"):
+                with open("scene_image_1.jpg", "rb") as src:
+                    with open(filename, "wb") as dst:
+                        dst.write(src.read())
+                print(f"   🔄 已将 {filename} 通过备用图兜底对齐。")
+                generated_files.append(filename)
+                
+        # 💡 核心防流控：每生成完一张图，强制在内存中冷却 5 秒，防止触发服务器频率限制！
+        time.sleep(5)
             
     return generated_files
 
