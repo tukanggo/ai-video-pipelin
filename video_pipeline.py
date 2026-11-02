@@ -101,49 +101,36 @@ def extract_voiceovers(script_text):
     chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、：；“”‘’]', script_text))
     return chinese_chars[:800] if len(chinese_chars) > 10 else script_text[:500]
 
-# ==================== 5. 智能分块切片版：1080P 多图独立渲染 ====================
+# ==================== 5. 终极全局暴力捕获：确保 100% 独立生成每一幕的高清图 ====================
 def generate_one_image_per_act(script_text):
-    print("🎨 正在使用智能分块切片解析器，精准提取每一幕的专属生图提示词...")
+    print("🎨 正在使用全局正则扫描器，强力提取脚本中的所有生图提示词并独立渲染...")
     
-    parts = re.split(r'🖼️\s*[^:\n]*[:：]', script_text)
-    if len(parts) <= 1:
-        parts = re.split(r'生图提示词|Image Prompt', script_text)
-        
+    raw_matches = re.findall(r'(?:生图提示词|Image Prompt)\s*[:：]\s*(?:>)?\s*([A-Za-z0-9\s,\.\-_\'\"!#\-\–—\(\)]+)', script_text)
+    
     prompts = []
-    for part in parts[1:]:
-        lines = part.strip().split('\n')
-        prompt_lines = []
-        for line in lines:
-            if any(tag in line for tag in ["🎥", "第二步", "⏱️", "时间轴", "📌", "幕号", "🎵", "音效", "🎙️", "口播旁白", "---", "###"]):
-                break
-            cleaned = line.strip(" >*`-_'\"")
-            if cleaned:
-                prompt_lines.append(cleaned)
-                
-        full_prompt = " ".join(prompt_lines)
-        full_prompt = re.sub(r'^(第一步：生图提示词|生图提示词|Image Prompt)\s*[:：]?\s*', '', full_prompt, flags=re.IGNORECASE)
-        
-        if len(full_prompt.strip()) > 10:
-            prompts.append(full_prompt.strip())
+    for m in raw_matches:
+        cleaned = m.strip(" >*`-_'\"")
+        if len(cleaned) > 15 and cleaned not in prompts:
+            prompts.append(cleaned)
             
-    if not prompts:
-        print("⚠️ 未能通过切片捕获，启动多幕标准保底 Prompt...")
+    if len(prompts) < 2:
+        print("⚠️ 全局扫描未满，启动多幕标准保底方案，确保生成 4 张高清分镜图...")
         prompts = [
-            "A cinematic wide-angle photograph of an old, dark, cluttered Malaysian apartment kitchen, 8k resolution --ar 9:16",
-            "Construction montage shot of a interior renovation in progress, warm microcement wall, 8k --ar 9:16",
-            "Stunning transformation shot of a modern Japandi style kitchen in a bright apartment, 8k --ar 9:16",
-            "Aesthetic close-up detail shot of the Japandi kitchen, warm LED light, photorealistic --ar 9:16"
+            "A cinematic wide-angle photograph of an old, dark, cluttered Malaysian apartment kitchen, dated yellowed tiles, disorganized countertops, dim lighting, 8k resolution --ar 9:16",
+            "Construction montage shot of a interior renovation in progress, plasterer applying warm grey smooth microcement to a wall, oak wood cabinet, 8k --ar 9:16",
+            "Stunning transformation shot of a modern Japandi style kitchen in a bright apartment, natural sunlight, smooth microcement walls, flawless oak cabinetry, 8k --ar 9:16",
+            "Aesthetic close-up detail shot of the Japandi kitchen, warm LED light casting a soft glow on a textured microcement wall, photorealistic --ar 9:16"
         ]
-        
-    print(f"✨ 成功精准识别出 {len(prompts)} 个独立分镜提示词，开始依次渲染每一幕的 1080P 高清图...")
-    
+
+    print(f"✨ 成功锁定 {len(prompts)} 个分镜生图任务，开始依次独立渲染每一幕的高清图...")
+
     generated_files = []
     for idx, prompt_text in enumerate(prompts, start=1):
         filename = f"scene_image_{idx}.jpg"
         
         hd_prompt = f"{prompt_text}, highly detailed, architectural interior photography, photorealistic, 8k resolution, cinematic lighting"
         
-        print(f"🖼️ 正在渲染第 {idx} 幕高清图 ({filename}): {hd_prompt[:50]}...")
+        print(f"🖼️ 正在渲染第 {idx} 幕高清图 ({filename})...")
         
         encoded_prompt = urllib.parse.quote(hd_prompt)
         image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1080&height=1920&nologo=true&enhance=true"
@@ -250,6 +237,14 @@ def save_to_notion_with_all_media(topic_title, script_content, image_files):
 
 # ==================== 主程序入口 ====================
 if __name__ == "__main__":
+    # 每次运行前自动清理本地旧的图片文件，确保全新生成
+    for f in os.listdir("."):
+        if f.startswith("scene_image_") and f.endswith(".jpg"):
+            try:
+                os.remove(f)
+            except:
+                pass
+
     title, script = generate_script()
     voiceover_text = extract_voiceovers(script)
     asyncio.run(text_to_speech(voiceover_text, "voiceover.mp3"))
