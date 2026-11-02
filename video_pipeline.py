@@ -61,12 +61,18 @@ def generate_script_json():
     )
     
     prompt = f"""
-    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份严格分为 4 个幕的脚本。
+    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份严格分为 6 个独立幕（Scene 1 至 Scene 6）的脚本。
     
     【项目信息】
     - 主题名称：{topic['title']}
     - 核心痛点：{topic['focus']}
     - 施工工艺：{topic['craft']}
+    
+    【节奏与结构要求 (Pacing)】
+    必须严格按照 3 个阶段展开，共拆分为 6 个独立的幕：
+    - 阶段一 (0-15s / 第1-2幕)：老旧痛点与视觉反差
+    - 阶段二 (15-45s / 第3-4幕)：匠心硬核施工与材质工艺
+    - 阶段三 (45-60s / 第5-6幕)：全景焕新呈现与细节特写
     
     【输出格式要求】
     必须严格输出一个 JSON 对象，包含以下字段：
@@ -75,7 +81,7 @@ def generate_script_json():
       "acts": [
         {{
           "act_number": "第一幕",
-          "time": "00:00 - 00:10",
+          "time": "00:00 - 00:07",
           "voiceover": "纯中文口播台词...",
           "sfx": "音效描述...",
           "image_prompt": "Detailed English image prompt for scene 1, photorealistic, 8k...",
@@ -83,7 +89,7 @@ def generate_script_json():
         }},
         {{
           "act_number": "第二幕",
-          "time": "00:10 - 00:30",
+          "time": "00:07 - 00:15",
           "voiceover": "纯中文口播台词...",
           "sfx": "音效描述...",
           "image_prompt": "Detailed English image prompt for scene 2, photorealistic, 8k...",
@@ -91,7 +97,7 @@ def generate_script_json():
         }},
         {{
           "act_number": "第三幕",
-          "time": "00:30 - 00:50",
+          "time": "00:15 - 00:30",
           "voiceover": "纯中文口播台词...",
           "sfx": "音效描述...",
           "image_prompt": "Detailed English image prompt for scene 3, photorealistic, 8k...",
@@ -99,10 +105,26 @@ def generate_script_json():
         }},
         {{
           "act_number": "第四幕",
-          "time": "00:50 - 01:00",
+          "time": "00:30 - 00:45",
           "voiceover": "纯中文口播台词...",
           "sfx": "音效描述...",
           "image_prompt": "Detailed English image prompt for scene 4, photorealistic, 8k...",
+          "video_prompt": "English video prompt..."
+        }},
+        {{
+          "act_number": "第五幕",
+          "time": "00:45 - 00:55",
+          "voiceover": "纯中文口播台词...",
+          "sfx": "音效描述...",
+          "image_prompt": "Detailed English image prompt for scene 5, photorealistic, 8k...",
+          "video_prompt": "English video prompt..."
+        }},
+        {{
+          "act_number": "第六幕",
+          "time": "00:55 - 01:00",
+          "voiceover": "纯中文口播台词...",
+          "sfx": "音效描述...",
+          "image_prompt": "Detailed English image prompt for scene 6, photorealistic, 8k...",
           "video_prompt": "English video prompt..."
         }}
       ]
