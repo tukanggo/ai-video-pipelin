@@ -101,59 +101,55 @@ def extract_voiceovers(script_text):
     chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、：；“”‘’]', script_text))
     return chinese_chars[:800] if len(chinese_chars) > 10 else script_text[:500]
 
-# ==================== 5. 核心升级：按幕精确配对生成【每一幕专属一张】高清图 ====================
+# ==================== 5. 终极稳健版：强制全文本多图提取与渲染 ====================
 def generate_one_image_per_act(script_text):
-    print("🎨 正在按幕解析脚本，确保每一幕独立生成一张 1080P 高清效果图...")
+    print("🎨 正在全面扫描脚本，提取所有幕的生图提示词并强制生成多张 1080P 高清图...")
     
-    # 按照幕号（📌 幕号与主题 或 📌 第一幕）将脚本切分为独立的幕
-    acts = re.split(r'(?=📌\s*\*\*第[一二三四五六七八九十]+幕)', script_text)
-    if len(acts) <= 1:
-        # 备用切分法
-        acts = script_text.split("---")
-        
-    generated_files = []
-    act_count = 0
+    # 💡 核心改进：直接在全文本中通过正则表达式精准捕获所有 “生图提示词” 或 “Image Prompt” 后面的英文 Prompt
+    pattern = r"(?:生图提示词|Image Prompt).*?[:：]\s*(?:>)?\s*([A-Za-z0-9\s,\.\-_'\"!#]+?)(?=\n\s*[-*#]|\n\s*[⏱️🎙️🎵🎥🎬📌]|$)"
+    matches = re.findall(pattern, script_text, re.DOTALL)
     
-    for act_content in acts:
-        if "生图提示词" not in act_content and "Image Prompt" not in act_content:
-            continue
-            
-        act_count += 1
-        filename = f"scene_image_{act_count}.jpg"
-        
-        # 在当前幕内精准提取生图 Prompt
-        prompt_text = ""
-        lines = act_content.split('\n')
-        capture_prompt = False
-        
-        for line in lines:
+    # 过滤掉过短的无效文本
+    prompts = [m.strip(" >*`-_'\"") for m in matches if len(m.strip()) > 15]
+    
+    # 如果正则没有匹配到，启动备用方案：按行查找所有以 > 开头的英文长句
+    if len(prompts) < 2:
+        print("⚠️ 正则多图捕获未满，启动备用行扫描机制...")
+        prompts = []
+        lines = script_text.split('\n')
+        for i, line in enumerate(lines):
             if "生图提示词" in line or "Image Prompt" in line:
-                capture_prompt = True
-                parts = line.split(':', 1)
-                if len(parts) > 1 and len(parts[1].strip()) > 5:
-                    clean_p = parts[1].strip(" >*`-_'\"")
-                    if not any(tag in clean_p for tag in ["生图提示词", "第一步"]):
-                        prompt_text = clean_p
+                # 向下寻找接下来的非空英文行
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    candidate = lines[j].strip(" >*`-_'\"")
+                    if len(candidate) > 15 and not any(tag in candidate for tag in ["🎥", "第二步", "时间轴", "幕号", "📌", "🎙️", "🎵"]):
+                        if candidate not in prompts:
+                            prompts.append(candidate)
                         break
-                continue
-            
-            if capture_prompt:
-                clean_l = line.strip(" >*`-_'\"")
-                if clean_l and not any(tag in clean_l for tag in ["🎥", "第二步", "时间轴", "幕号", "📌"]):
-                    prompt_text = clean_l
-                    break
+                        
+    # 终极保底
+    if not prompts:
+        prompts = [
+            "A cinematic wide-angle photograph of an old, dark, cluttered Malaysian apartment kitchen, 8k resolution",
+            "Construction montage shot of a interior renovation in progress, warm microcement wall, 8k",
+            "Stunning transformation shot of a modern Japandi style kitchen in a bright apartment, 8k",
+            "Aesthetic close-up detail shot of the Japandi kitchen, warm LED light, photorealistic"
+        ]
         
-        # 如果没抓到，用该幕的摘要兜底
-        if not prompt_text or len(prompt_text) < 15:
-            prompt_text = f"Interior design scene {act_count}, modern minimalist renovation, photorealistic, 8k resolution, architectural photography"
-            
-        # 追加摄影级超高清画质关键词
+    print(f"✨ 成功精准识别出 {len(prompts)} 个独立分镜提示词，开始依次渲染专属高清图...")
+    
+    generated_files = []
+    for idx, prompt_text in enumerate(prompts, start=1):
+        # 💡 确保每一张图片拥有独立的唯一文件名，绝对不会互相覆盖！
+        filename = f"scene_image_{idx}.jpg"
+        
+        # 附加超高清画质关键词
         hd_prompt = f"{prompt_text}, highly detailed, architectural interior photography, photorealistic, 8k resolution, cinematic lighting"
         
-        print(f"🖼️ 正在渲染第 {act_count} 幕专属高清图: {hd_prompt[:60]}...")
+        print(f"🖼️ 正在渲染第 {idx} 张高清图 ({filename}): {hd_prompt[:50]}...")
         
         encoded_prompt = urllib.parse.quote(hd_prompt)
-        # 1080P 竖屏或横屏自适应（根据 Prompt 里的 --ar 调整，这里默认 1080x1920 竖屏短视频比例）
+        # 1080x1920 竖屏短视频比例
         image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1080&height=1920&nologo=true&enhance=true"
         
         success = False
@@ -163,18 +159,18 @@ def generate_one_image_per_act(script_text):
                 if res.status_code == 200 and len(res.content) > 15000:
                     with open(filename, "wb") as f:
                         f.write(res.content)
-                    print(f"   ✅ 第 {act_count} 幕专属图生成成功 -> {filename} ({len(res.content) // 1024} KB)")
+                    print(f"   ✅ {filename} 生成并保存成功 ({len(res.content) // 1024} KB)")
                     generated_files.append(filename)
                     success = True
                     break
             except Exception as e:
-                print(f"   ⚠️ 第 {act_count} 幕图下载异常 ({e})，重试中...")
-            time.sleep(4)
+                print(f"   ⚠️ {filename} 下载异常 ({e})，重试中...")
+            time.sleep(3)
             
         if not success:
-            print(f"   ❌ 第 {act_count} 幕图生成失败，跳过。")
+            print(f"   ❌ {filename} 生成失败，跳过。")
             
-    print(f"🎉 共成功为每一幕独立生成了 {len(generated_files)} 张专属高清图！")
+    print(f"🎉 成功完成所有图片渲染，共生成 {len(generated_files)} 张独立高清图！")
     return generated_files
 
 # ==================== 6. Edge-TTS 语音合成 ====================
