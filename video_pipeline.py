@@ -34,7 +34,7 @@ DESIGN_TOPICS = [
     }
 ]
 
-# ==================== 3. 生成 Gemini 分镜脚本 ====================
+# ==================== 3. 生成 Gemini 分镜脚本（严格约束 4 幕格式） ====================
 def generate_script():
     topic = random.choice(DESIGN_TOPICS)
     print(f"📌 正在调用 Gemini 生成设计短视频脚本: [{topic['title']}]...")
@@ -42,21 +42,21 @@ def generate_script():
     model = genai.GenerativeModel("gemini-3.6-flash")
     
     prompt = f"""
-    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份分步执行的分镜脚本（必须严格分为 4 幕：第一幕、第二幕、第三幕、第四幕）。
+    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份严格分为 4 幕的分镜脚本（必须有第一幕、第二幕、第三幕、第四幕）。
     
     【项目信息】
     - 主题名称：{topic['title']}
     - 核心痛点：{topic['focus']}
     - 施工工艺：{topic['craft']}
     
-    【核心格式要求】
-    每一幕必须严格包含以下结构，切勿漏掉 Emoji 标签：
-    - 📌 **幕号与主题** 
-    - ⏱️ **时间轴** 
-    - 🎙️ **口播旁白 (Voiceover)**: (纯中文口播台词，语气自然流畅)
-    - 🎵 **音效 (SFX)**: 
-    - 🖼️ **第一步：生图提示词**: (必须提供详细的英文提示词，以 `>` 开头)
-    - 🎥 **第二步：生视频提示词**: (必须提供详细的英文提示词，以 `>` 开头)
+    【严格格式要求（4幕缺一不可）】
+    请严格按顺序输出 4 个幕，每一幕必须包含且完全对齐以下 6 行 Emoji 结构：
+    📌 **第X幕：主题名称**
+    ⏱️ **时间轴**: 00:xx - 00:xx
+    🎙️ **口播旁白 (Voiceover)**: (纯中文台词)
+    🎵 **音效 (SFX)**: (音效描述)
+    🖼️ **第一步：生图提示词**: (必须提供详细的英文生图提示词，以 `>` 开头)
+    🎥 **第二步：生视频提示词**: (必须提供详细的英文生视频提示词，以 `>` 开头)
     """
     
     max_retries = 3
@@ -101,28 +101,65 @@ def extract_voiceovers(script_text):
     chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、：；“”‘’]', script_text))
     return chinese_chars[:800] if len(chinese_chars) > 10 else script_text[:500]
 
-# ==================== 5. 终极全局暴力捕获：确保 100% 独立生成每一幕的高清图 ====================
+# ==================== 5. 增强版：四幕精准对齐与多图独立渲染 ====================
 def generate_one_image_per_act(script_text):
-    print("🎨 正在使用全局正则扫描器，强力提取脚本中的所有生图提示词并独立渲染...")
+    print("🎨 正在扫描脚本中的所有分幕生图提示词...")
     
-    raw_matches = re.findall(r'(?:生图提示词|Image Prompt)\s*[:：]\s*(?:>)?\s*([A-Za-z0-9\s,\.\-_\'\"!#\-\–—\(\)]+)', script_text)
-    
-    prompts = []
-    for m in raw_matches:
-        cleaned = m.strip(" >*`-_'\"")
-        if len(cleaned) > 15 and cleaned not in prompts:
-            prompts.append(cleaned)
-            
-    if len(prompts) < 2:
-        print("⚠️ 全局扫描未满，启动多幕标准保底方案，确保生成 4 张高清分镜图...")
-        prompts = [
-            "A cinematic wide-angle photograph of an old, dark, cluttered Malaysian apartment kitchen, dated yellowed tiles, disorganized countertops, dim lighting, 8k resolution --ar 9:16",
-            "Construction montage shot of a interior renovation in progress, plasterer applying warm grey smooth microcement to a wall, oak wood cabinet, 8k --ar 9:16",
-            "Stunning transformation shot of a modern Japandi style kitchen in a bright apartment, natural sunlight, smooth microcement walls, flawless oak cabinetry, 8k --ar 9:16",
-            "Aesthetic close-up detail shot of the Japandi kitchen, warm LED light casting a soft glow on a textured microcement wall, photorealistic --ar 9:16"
-        ]
+    acts = re.split(r'(?=📌\s*\*\*第[一二三四五六七八九十]+幕|第[一二三四]幕)', script_text)
+    if len(acts) < 2:
+        acts = script_text.split("---")
 
-    print(f"✨ 成功锁定 {len(prompts)} 个分镜生图任务，开始依次独立渲染每一幕的高清图...")
+    extracted_prompts = []
+    
+    for act in acts:
+        if "生图提示词" not in act and "Image Prompt" not in act:
+            continue
+            
+        lines = act.split('\n')
+        capturing = False
+        p_lines = []
+        for line in lines:
+            if "生图提示词" in line or "Image Prompt" in line:
+                capturing = True
+                parts = line.split(':', 1)
+                if len(parts) > 1 and len(parts[1].strip()) > 5:
+                    clean = parts[1].strip(" >*`-_'\"")
+                    if not any(k in clean for k in ["生图提示词", "第一步"]):
+                        p_lines.append(clean)
+                continue
+            if capturing:
+                if any(tag in line for tag in ["🎥", "第二步", "⏱️", "时间轴", "🎵", "音效", "🎙️", "口播旁白", "📌", "---", "###"]):
+                    capturing = False
+                    break
+                c = line.strip(" >*`-_'\"")
+                if c:
+                    p_lines.append(c)
+                    
+        if p_lines:
+            full_p = " ".join(p_lines)
+            full_p = re.sub(r'^(第一步：生图提示词|生图提示词|Image Prompt)\s*[:：]?\s*', '', full_p, flags=re.IGNORECASE)
+            if len(full_p) > 10:
+                extracted_prompts.append(full_p)
+
+    print(f"✨ 正则成功捕获到 {len(extracted_prompts)} 个分镜 Prompt。")
+
+    # 标准 4 幕精美设计保底库（确保不足 4 个时完美补齐）
+    standard_fallbacks = [
+        "A cinematic wide-angle photograph of an old, dark, cluttered Malaysian apartment kitchen, dated yellowed tiles, disorganized countertops, dim lighting, 8k resolution --ar 9:16",
+        "Construction montage shot of a interior renovation in progress, plasterer applying warm grey smooth microcement to a wall, oak wood cabinet, 8k --ar 9:16",
+        "Stunning transformation shot of a modern Japandi style kitchen in a bright apartment, natural sunlight, smooth microcement walls, flawless oak cabinetry, 8k --ar 9:16",
+        "Aesthetic close-up detail shot of the Japandi kitchen, warm LED light casting a soft glow on a textured microcement wall, photorealistic --ar 9:16"
+    ]
+
+    prompts = []
+    for i in range(4):
+        if i < len(extracted_prompts):
+            prompts.append(extracted_prompts[i])
+        else:
+            prompts.append(standard_fallbacks[i])
+            print(f"⚠️ 第 {i+1} 幕未匹配到提示词，已自动启用标准对齐保底 Prompt。")
+
+    print(f"🚀 准备就绪，开始依次独立渲染全部 4 张高清图...")
 
     generated_files = []
     for idx, prompt_text in enumerate(prompts, start=1):
@@ -142,7 +179,7 @@ def generate_one_image_per_act(script_text):
                 if res.status_code == 200 and len(res.content) > 15000:
                     with open(filename, "wb") as f:
                         f.write(res.content)
-                    print(f"   ✅ {filename} 生成并保存成功 ({len(res.content) // 1024} KB)")
+                    print(f"   ✅ {filename} 渲染并保存成功 ({len(res.content) // 1024} KB)")
                     generated_files.append(filename)
                     success = True
                     break
@@ -151,9 +188,8 @@ def generate_one_image_per_act(script_text):
             time.sleep(3)
             
         if not success:
-            print(f"   ❌ {filename} 生成失败，跳过。")
+            print(f"   ❌ {filename} 生成失败。")
             
-    print(f"🎉 成功完成所有分幕图片渲染，共生成 {len(generated_files)} 张独立高清图！")
     return generated_files
 
 # ==================== 6. Edge-TTS 语音合成 ====================
