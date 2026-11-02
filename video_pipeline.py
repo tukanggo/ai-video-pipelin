@@ -3,11 +3,11 @@ import time
 import random
 import asyncio
 import requests
+import json
 import re
 import urllib.parse
 import edge_tts
 import google.generativeai as genai
-from google.api_core.exceptions import ResourceExhausted
 
 # ==================== 1. 配置与环境变量 ====================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -34,133 +34,107 @@ DESIGN_TOPICS = [
     }
 ]
 
-# ==================== 3. 生成 Gemini 分镜脚本（严格约束 4 幕格式） ====================
-def generate_script():
+# ==================== 3. 生成 Gemini 结构化 JSON 脚本（100% 稳定无漂移） ====================
+def generate_script_json():
     topic = random.choice(DESIGN_TOPICS)
-    print(f"📌 正在调用 Gemini 生成设计短视频脚本: [{topic['title']}]...")
+    print(f"📌 正在调用 Gemini 生成设计短视频结构化脚本: [{topic['title']}]...")
     
-    model = genai.GenerativeModel("gemini-3.6-flash")
+    # 💡 开启 JSON 模式，确保 Gemini 严格按数据结构返回，绝不会格式崩溃
+    model = genai.GenerativeModel(
+        model_name="gemini-3.6-flash",
+        generation_config={"response_mime_type": "application/json"}
+    )
     
     prompt = f"""
-    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份严格分为 4 幕的分镜脚本（必须有第一幕、第二幕、第三幕、第四幕）。
+    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份严格分为 4 个幕的脚本。
     
     【项目信息】
     - 主题名称：{topic['title']}
     - 核心痛点：{topic['focus']}
     - 施工工艺：{topic['craft']}
     
-    【严格格式要求（4幕缺一不可）】
-    请严格按顺序输出 4 个幕，每一幕必须包含且完全对齐以下 6 行 Emoji 结构：
-    📌 **第X幕：主题名称**
-    ⏱️ **时间轴**: 00:xx - 00:xx
-    🎙️ **口播旁白 (Voiceover)**: (纯中文台词)
-    🎵 **音效 (SFX)**: (音效描述)
-    🖼️ **第一步：生图提示词**: (必须提供详细的英文生图提示词，以 `>` 开头)
-    🎥 **第二步：生视频提示词**: (必须提供详细的英文生视频提示词，以 `>` 开头)
+    【输出格式要求】
+    必须严格输出一个 JSON 对象，包含以下字段：
+    {{
+      "title": "{topic['title']}",
+      "acts": [
+        {{
+          "act_number": "第一幕",
+          "time": "00:00 - 00:10",
+          "voiceover": "纯中文口播台词...",
+          "sfx": "音效描述...",
+          "image_prompt": "Detailed English image prompt for scene 1, photorealistic, 8k...",
+          "video_prompt": "English video prompt..."
+        }},
+        {{
+          "act_number": "第二幕",
+          "time": "00:10 - 00:30",
+          "voiceover": "纯中文口播台词...",
+          "sfx": "音效描述...",
+          "image_prompt": "Detailed English image prompt for scene 2, photorealistic, 8k...",
+          "video_prompt": "English video prompt..."
+        }},
+        {{
+          "act_number": "第三幕",
+          "time": "00:30 - 00:50",
+          "voiceover": "纯中文口播台词...",
+          "sfx": "音效描述...",
+          "image_prompt": "Detailed English image prompt for scene 3, photorealistic, 8k...",
+          "video_prompt": "English video prompt..."
+        }},
+        {{
+          "act_number": "第四幕",
+          "time": "00:50 - 01:00",
+          "voiceover": "纯中文口播台词...",
+          "sfx": "音效描述...",
+          "image_prompt": "Detailed English image prompt for scene 4, photorealistic, 8k...",
+          "video_prompt": "English video prompt..."
+        }}
+      ]
+    }}
     """
     
     max_retries = 3
     for attempt in range(max_retries):
         try:
             response = model.generate_content(prompt)
-            return topic['title'], response.text
+            data = json.loads(response.text)
+            
+            # 将 JSON 转换为整洁的 Markdown 文本，用于 Notion 展示和旁白提取
+            markdown_script = f"# {data['title']}\n\n"
+            for act in data['acts']:
+                markdown_script += f"📌 **{act['act_number']}**\n"
+                markdown_script += f"⏱️ **时间轴**: {act['time']}\n"
+                markdown_script += f"🎙️ **口播旁白 (Voiceover)**: {act['voiceover']}\n"
+                markdown_script += f"🎵 **音效 (SFX)**: {act['sfx']}\n"
+                markdown_script += f"🖼️ **第一步：生图提示词**: > {act['image_prompt']}\n"
+                markdown_script += f"🎥 **第二步：生视频提示词**: > {act['video_prompt']}\n\n---\n\n"
+            
+            # 提取所有幕的 Prompt 列表
+            prompts = [act['image_prompt'] for act in data['acts']]
+            
+            return data['title'], markdown_script, prompts
         except Exception as e:
             if attempt < max_retries - 1:
-                print(f"⚠️ 生成脚本出错 ({e})，正在重试（等待 10 秒）...")
-                time.sleep(10)
+                print(f"⚠️ 生成 JSON 脚本出错 ({e})，正在重试（等待 5 秒）...")
+                time.sleep(5)
             else:
                 raise e
 
 # ==================== 4. 提取纯旁白 ====================
 def extract_voiceovers(script_text):
-    print("🔍 正在从脚本中精准过滤并提取纯口播旁白...")
-    voiceover_lines = []
-    lines = script_text.split('\n')
-    capture = False
+    print("🔍 正在从脚本中精准提取纯口播旁白...")
+    voiceovers = re.findall(r'🎙️\s*\*\*口播旁白.*?[:：]\*\*\s*(.+?)(?=\n[🎵🖼️🎥📌]|\Z)', script_text, re.DOTALL)
+    if voiceovers:
+        return " ".join([v.strip() for v in voiceovers])
     
-    for line in lines:
-        if "口播旁白" in line or "Voiceover" in line:
-            parts = re.split(r'[:：]', line, 1)
-            if len(parts) > 1:
-                content = parts[1].strip(" *`-_'")
-                if content and not content.startswith("Voiceover") and not content.startswith("口播旁白"):
-                    voiceover_lines.append(content)
-            capture = True
-            continue
-        
-        if capture and any(tag in line for tag in ["⏱️", "🎵", "🖼️", "🎥", "###", "---"]):
-            capture = False
-        elif capture:
-            content = line.strip(" *`-_'")
-            if content and not any(tag in content for tag in ["时间轴", "音效", "提示词", "生图", "生视频"]):
-                voiceover_lines.append(content)
-    
-    if voiceover_lines:
-        return " ".join(voiceover_lines)
-        
     chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、：；“”‘’]', script_text))
     return chinese_chars[:800] if len(chinese_chars) > 10 else script_text[:500]
 
-# ==================== 5. 增强版：四幕精准对齐与多图独立渲染 ====================
-def generate_one_image_per_act(script_text):
-    print("🎨 正在扫描脚本中的所有分幕生图提示词...")
+# ==================== 5. 并行渲染 4 张专属 1080P 高清图 ====================
+def generate_images_from_prompts(prompts):
+    print(f"✨ 成功获取到 {len(prompts)} 个独立分镜 Prompt，开始依次渲染全部 4 张高清图...")
     
-    acts = re.split(r'(?=📌\s*\*\*第[一二三四五六七八九十]+幕|第[一二三四]幕)', script_text)
-    if len(acts) < 2:
-        acts = script_text.split("---")
-
-    extracted_prompts = []
-    
-    for act in acts:
-        if "生图提示词" not in act and "Image Prompt" not in act:
-            continue
-            
-        lines = act.split('\n')
-        capturing = False
-        p_lines = []
-        for line in lines:
-            if "生图提示词" in line or "Image Prompt" in line:
-                capturing = True
-                parts = line.split(':', 1)
-                if len(parts) > 1 and len(parts[1].strip()) > 5:
-                    clean = parts[1].strip(" >*`-_'\"")
-                    if not any(k in clean for k in ["生图提示词", "第一步"]):
-                        p_lines.append(clean)
-                continue
-            if capturing:
-                if any(tag in line for tag in ["🎥", "第二步", "⏱️", "时间轴", "🎵", "音效", "🎙️", "口播旁白", "📌", "---", "###"]):
-                    capturing = False
-                    break
-                c = line.strip(" >*`-_'\"")
-                if c:
-                    p_lines.append(c)
-                    
-        if p_lines:
-            full_p = " ".join(p_lines)
-            full_p = re.sub(r'^(第一步：生图提示词|生图提示词|Image Prompt)\s*[:：]?\s*', '', full_p, flags=re.IGNORECASE)
-            if len(full_p) > 10:
-                extracted_prompts.append(full_p)
-
-    print(f"✨ 正则成功捕获到 {len(extracted_prompts)} 个分镜 Prompt。")
-
-    # 标准 4 幕精美设计保底库（确保不足 4 个时完美补齐）
-    standard_fallbacks = [
-        "A cinematic wide-angle photograph of an old, dark, cluttered Malaysian apartment kitchen, dated yellowed tiles, disorganized countertops, dim lighting, 8k resolution --ar 9:16",
-        "Construction montage shot of a interior renovation in progress, plasterer applying warm grey smooth microcement to a wall, oak wood cabinet, 8k --ar 9:16",
-        "Stunning transformation shot of a modern Japandi style kitchen in a bright apartment, natural sunlight, smooth microcement walls, flawless oak cabinetry, 8k --ar 9:16",
-        "Aesthetic close-up detail shot of the Japandi kitchen, warm LED light casting a soft glow on a textured microcement wall, photorealistic --ar 9:16"
-    ]
-
-    prompts = []
-    for i in range(4):
-        if i < len(extracted_prompts):
-            prompts.append(extracted_prompts[i])
-        else:
-            prompts.append(standard_fallbacks[i])
-            print(f"⚠️ 第 {i+1} 幕未匹配到提示词，已自动启用标准对齐保底 Prompt。")
-
-    print(f"🚀 准备就绪，开始依次独立渲染全部 4 张高清图...")
-
     generated_files = []
     for idx, prompt_text in enumerate(prompts, start=1):
         filename = f"scene_image_{idx}.jpg"
@@ -281,8 +255,15 @@ if __name__ == "__main__":
             except:
                 pass
 
-    title, script = generate_script()
+    # 1. 生成结构化 JSON 脚本并直接获取 4 个独立的 Prompts
+    title, script, prompts = generate_script_json()
+    
+    # 2. 提取并合成旁白语音
     voiceover_text = extract_voiceovers(script)
     asyncio.run(text_to_speech(voiceover_text, "voiceover.mp3"))
-    image_files = generate_one_image_per_act(script)
+    
+    # 3. 严格基于 4 个 Prompts 并行渲染 4 张独立高清图
+    image_files = generate_images_from_prompts(prompts)
+    
+    # 4. 同步写入 Notion
     save_to_notion_with_all_media(title, script, image_files)
