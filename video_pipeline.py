@@ -49,19 +49,18 @@ DESIGN_TOPICS = [
     }
 ]
 
-# ==================== 3. 生成 Gemini 结构化 JSON 脚本（100% 稳定无漂移） ====================
+# ==================== 3. 生成 7 幕结构化 JSON 脚本（严格对齐 7 张图） ====================
 def generate_script_json():
     topic = random.choice(DESIGN_TOPICS)
-    print(f"📌 正在调用 Gemini 生成设计短视频结构化脚本: [{topic['title']}]...")
+    print(f"📌 正在调用 Gemini 生成 7 幕节奏优化的设计短视频结构化脚本: [{topic['title']}]...")
     
-    # 💡 开启 JSON 模式，确保 Gemini 严格按数据结构返回，绝不会格式崩溃
     model = genai.GenerativeModel(
         model_name="gemini-3.6-flash",
         generation_config={"response_mime_type": "application/json"}
     )
     
     prompt = f"""
-    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份严格分为 6 个独立幕（Scene 1 至 Scene 6）的脚本。
+    你是一位专业的室内设计短视频编导与内容创作者。请根据以下设计主题，为一期约 60 秒的短视频创作一份严格分为 7 个独立幕（Scene 1 至 Scene 7）的脚本。
     
     【项目信息】
     - 主题名称：{topic['title']}
@@ -69,13 +68,13 @@ def generate_script_json():
     - 施工工艺：{topic['craft']}
     
     【节奏与结构要求 (Pacing)】
-    必须严格按照 3 个阶段展开，共拆分为 6 个独立的幕：
+    必须严格按照 3 个阶段展开，共拆分为 7 个独立的幕：
     - 阶段一 (0-15s / 第1-2幕)：老旧痛点与视觉反差
-    - 阶段二 (15-45s / 第3-4幕)：匠心硬核施工与材质工艺
-    - 阶段三 (45-60s / 第5-6幕)：全景焕新呈现与细节特写
+    - 阶段二 (15-45s / 第3-5幕)：匠心硬核施工与材质工艺
+    - 阶段三 (45-60s / 第6-7幕)：全景焕新呈现与细节特写
     
     【输出格式要求】
-    必须严格输出一个 JSON 对象，包含以下字段：
+    必须严格输出一个 JSON 对象，包含以下字段（必须包含 7 个 acts）：
     {{
       "title": "{topic['title']}",
       "acts": [
@@ -97,7 +96,7 @@ def generate_script_json():
         }},
         {{
           "act_number": "第三幕",
-          "time": "00:15 - 00:30",
+          "time": "00:15 - 00:25",
           "voiceover": "纯中文口播台词...",
           "sfx": "音效描述...",
           "image_prompt": "Detailed English image prompt for scene 3, photorealistic, 8k...",
@@ -105,7 +104,7 @@ def generate_script_json():
         }},
         {{
           "act_number": "第四幕",
-          "time": "00:30 - 00:45",
+          "time": "00:25 - 00:35",
           "voiceover": "纯中文口播台词...",
           "sfx": "音效描述...",
           "image_prompt": "Detailed English image prompt for scene 4, photorealistic, 8k...",
@@ -113,7 +112,7 @@ def generate_script_json():
         }},
         {{
           "act_number": "第五幕",
-          "time": "00:45 - 00:55",
+          "time": "00:35 - 00:45",
           "voiceover": "纯中文口播台词...",
           "sfx": "音效描述...",
           "image_prompt": "Detailed English image prompt for scene 5, photorealistic, 8k...",
@@ -121,10 +120,18 @@ def generate_script_json():
         }},
         {{
           "act_number": "第六幕",
-          "time": "00:55 - 01:00",
+          "time": "00:45 - 00:55",
           "voiceover": "纯中文口播台词...",
           "sfx": "音效描述...",
           "image_prompt": "Detailed English image prompt for scene 6, photorealistic, 8k...",
+          "video_prompt": "English video prompt..."
+        }},
+        {{
+          "act_number": "第七幕",
+          "time": "00:55 - 01:00",
+          "voiceover": "纯中文口播台词...",
+          "sfx": "音效描述...",
+          "image_prompt": "Detailed English image prompt for scene 7, photorealistic, 8k...",
           "video_prompt": "English video prompt..."
         }}
       ]
@@ -137,7 +144,7 @@ def generate_script_json():
             response = model.generate_content(prompt)
             data = json.loads(response.text)
             
-            # 将 JSON 转换为整洁的 Markdown 文本，用于 Notion 展示和旁白提取
+            # 转换为整洁的 Markdown 文本用于 Notion 展示
             markdown_script = f"# {data['title']}\n\n"
             for act in data['acts']:
                 markdown_script += f"📌 **{act['act_number']}**\n"
@@ -147,13 +154,13 @@ def generate_script_json():
                 markdown_script += f"🖼️ **第一步：生图提示词**: > {act['image_prompt']}\n"
                 markdown_script += f"🎥 **第二步：生视频提示词**: > {act['video_prompt']}\n\n---\n\n"
             
-            # 提取所有幕的 Prompt 列表
+            # 提取全部 7 个 Prompt
             prompts = [act['image_prompt'] for act in data['acts']]
             
             return data['title'], markdown_script, prompts
         except Exception as e:
             if attempt < max_retries - 1:
-                print(f"⚠️ 生成 JSON 脚本出错 ({e})，正在重试（等待 5 秒）...")
+                print(f"⚠️ 生成 7 幕 JSON 脚本出错 ({e})，正在重试（等待 5 秒）...")
                 time.sleep(5)
             else:
                 raise e
@@ -168,9 +175,9 @@ def extract_voiceovers(script_text):
     chinese_chars = "".join(re.findall(r'[\u4e00-\u9fa5，。！？、：；“”‘’]', script_text))
     return chinese_chars[:800] if len(chinese_chars) > 10 else script_text[:500]
 
-# ==================== 5. 稳健版：带防流控冷却与重试的 4 图并行渲染 ====================
+# ==================== 5. 串行防流控渲染全部 7 张高清图 ====================
 def generate_images_from_prompts(prompts):
-    print(f"✨ 成功获取到 {len(prompts)} 个独立分镜 Prompt，开始依次渲染全部 4 张高清图（已启用防流控保护）...")
+    print(f"✨ 成功获取到 {len(prompts)} 个独立分镜 Prompt，开始依次渲染全部 7 张高清图（已启用防流控保护）...")
     
     generated_files = []
     for idx, prompt_text in enumerate(prompts, start=1):
@@ -178,17 +185,14 @@ def generate_images_from_prompts(prompts):
         
         hd_prompt = f"{prompt_text}, highly detailed, architectural interior photography, photorealistic, 8k resolution, cinematic lighting"
         
-        print(f"🖼️ 正在渲染第 {idx} 幕高清图 ({filename})...")
+        print(f"🖼️ 正在渲染第 {idx}/7 幕高清图 ({filename})...")
         
         encoded_prompt = urllib.parse.quote(hd_prompt)
-        # 针对稳定性，适当优化渲染参数
         image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1080&height=1920&nologo=true"
         
         success = False
-        # 增加到最多重试 5 次，应对免费 API 的偶尔拥堵
         for attempt in range(1, 6):
             try:
-                # 延长超时时间至 60 秒
                 res = requests.get(image_url, timeout=60)
                 if res.status_code == 200 and len(res.content) > 15000:
                     with open(filename, "wb") as f:
@@ -202,21 +206,19 @@ def generate_images_from_prompts(prompts):
             except Exception as e:
                 print(f"   ⚠️ 第 {idx} 幕尝试 {attempt} 异常 ({e})，重试中...")
             
-            # 每次失败后阶梯等待递增时间
             time.sleep(5 * attempt)
             
         if not success:
-            print(f"   ❌ {filename} 连续重试后依然生成失败，使用保底兜底机制...")
-            # 极致兜底：如果某一张图实在下载失败，复制第一张图作为备用，确保永远有 4 张图提交
+            print(f"   ❌ {filename} 连续重试后依然生成失败，使用首张图进行兜底对齐...")
             if os.path.exists("scene_image_1.jpg"):
                 with open("scene_image_1.jpg", "rb") as src:
                     with open(filename, "wb") as dst:
                         dst.write(src.read())
-                print(f"   🔄 已将 {filename} 通过备用图兜底对齐。")
+                print(f"   🔄 已将 {filename} 通过备用图兜底。")
                 generated_files.append(filename)
                 
-        # 💡 核心防流控：每生成完一张图，强制在内存中冷却 5 秒，防止触发服务器频率限制！
-        time.sleep(5)
+        # 每生成完一张图，强制在内存中冷却 4 秒，防止触发 API 频率限制
+        time.sleep(4)
             
     return generated_files
 
@@ -248,7 +250,7 @@ def split_text_into_chunks(text, max_length=1900):
     return [text[i:i + max_length] for i in range(0, len(text), max_length)]
 
 def save_to_notion_with_all_media(topic_title, script_content, image_files):
-    print("📤 正在将完整脚本、每一幕专属高清图与音频播放器同步写入 Notion...")
+    print("📤 正在将完整脚本、全部 7 张专属高清图与音频播放器同步写入 Notion...")
     
     url = "https://api.notion.com/v1/pages"
     headers = {
@@ -264,6 +266,7 @@ def save_to_notion_with_all_media(topic_title, script_content, image_files):
     
     children_blocks = []
     
+    # 逐一挂载全部 7 张高清图
     for img in image_files:
         img_public_url = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/{img}"
         children_blocks.append({
@@ -275,6 +278,7 @@ def save_to_notion_with_all_media(topic_title, script_content, image_files):
             }
         })
         
+    # 在图片下方挂载语音播放器
     children_blocks.append({
         "object": "block",
         "type": "audio",
@@ -309,14 +313,14 @@ if __name__ == "__main__":
             except:
                 pass
 
-    # 1. 生成结构化 JSON 脚本并直接获取 4 个独立的 Prompts
+    # 1. 生成 7 幕结构化 JSON 脚本并直接获取 7 个独立的 Prompts
     title, script, prompts = generate_script_json()
     
     # 2. 提取并合成旁白语音
     voiceover_text = extract_voiceovers(script)
     asyncio.run(text_to_speech(voiceover_text, "voiceover.mp3"))
     
-    # 3. 严格基于 4 个 Prompts 并行渲染 4 张独立高清图
+    # 3. 严格基于 7 个 Prompts 依次串行渲染 7 张独立高清图
     image_files = generate_images_from_prompts(prompts)
     
     # 4. 同步写入 Notion
