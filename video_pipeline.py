@@ -25,7 +25,7 @@ def generate_script_json():
     print("📌 正在让 Gemini 自由发散创作一期最新的马来西亚房屋装修/家居改造短视频脚本...")
     
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
+        model_name="gemini-3.6-flash",
         generation_config={"response_mime_type": "application/json"}
     )
     
