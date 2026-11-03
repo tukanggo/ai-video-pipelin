@@ -30,11 +30,11 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 第三步：安装项目运行所需的 Python 库（💡 已更新为 google-genai, edge-tts, requests）
+      # 第三步：安装项目运行所需的 Python 库（💡 已修正为旧版 google-generativeai 匹配你的代码）
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install google-genai edge-tts requests
+          pip install google-generativeai edge-tts requests
 
       # 关键步骤：在运行 Python 脚本前，强制清理旧的图片和音频
       - name: Clean up old local images
